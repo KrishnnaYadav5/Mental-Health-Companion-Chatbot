@@ -9,35 +9,35 @@ st.set_page_config(
     layout="centered",
 )
 
-# UPDATED FOR 2026: Using the Gemini 3 Flash model
-API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+# STABLE 2026 ENDPOINT
+# Using gemini-2.5-flash for maximum stability. 
+# Use 'gemini-3-flash-preview' if you want the absolute newest experimental model.
+MODEL_NAME = "gemini-2.5-flash"
+API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent"
 
 SYSTEM_INSTRUCTION = """
 You are a compassionate and supportive AI companion designed specifically for students.
-Your primary role is to provide emotional support, detect mood, and respond with empathy.
-Validate feelings first, suggest relaxation techniques when needed, and follow safety protocols.
-Keep responses warm and concise. 🌟💚
+Primary Role: Provide emotional support, detect mood, and respond with empathy.
+- Validate feelings first ("I hear you", "That sounds tough").
+- Suggest relaxation techniques like 4-7-8 breathing or 5-4-3-2-1 grounding when stress is detected.
+- Maintain a warm, concise tone with gentle emojis 🌟.
 """
 
 # -------------------- HELPERS --------------------
 
 def call_gemini(api_key: str, history, user_message: str) -> str:
-    """Communicates with the Gemini 3 API via REST."""
     contents = []
     
-    # Requirement: The conversation MUST start with a 'user' message.
-    # We skip the initial assistant greeting from the session state history.
+    # Requirement: Payload must start with a 'user' message.
     for msg in history:
         if not contents and msg["role"] == "assistant":
             continue
-            
         role = "user" if msg["role"] == "user" else "model"
         contents.append({
             "role": role,
             "parts": [{"text": msg["content"]}],
         })
 
-    # Add current user message
     contents.append({
         "role": "user",
         "parts": [{"text": user_message}],
@@ -56,7 +56,7 @@ def call_gemini(api_key: str, history, user_message: str) -> str:
     }
     
     try:
-        # We append the key to the URL as a query parameter
+        # Note: key is passed as a query parameter
         resp = requests.post(
             f"{API_URL}?key={api_key}",
             headers={"Content-Type": "application/json"},
@@ -64,24 +64,21 @@ def call_gemini(api_key: str, history, user_message: str) -> str:
             timeout=30,
         )
         
-        # Handle the specific 404/403 errors with clear feedback
         if resp.status_code == 404:
-            raise RuntimeError("Model 'gemini-3-flash' not found. Please check your API project in Google AI Studio.")
+            raise RuntimeError(f"Model '{MODEL_NAME}' not found. Try 'gemini-2.5-flash' for stability.")
         
         resp.raise_for_status()
         data = resp.json()
         
-        if "candidates" in data and len(data["candidates"]) > 0:
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-        return "I'm listening, but I couldn't generate a response. Mind trying again?"
+        return data["candidates"][0]["content"]["parts"][0]["text"]
 
     except requests.exceptions.HTTPError as e:
-        error_info = resp.json().get("error", {}).get("message", str(e))
-        raise RuntimeError(f"API Error: {error_info}")
+        error_msg = resp.json().get("error", {}).get("message", str(e))
+        raise RuntimeError(f"API Error: {error_msg}")
     except Exception as e:
         raise RuntimeError(f"Connection Error: {e}")
 
-# -------------------- SESSION STATE --------------------
+# -------------------- UI & SESSION STATE --------------------
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -89,57 +86,49 @@ if "messages" not in st.session_state:
 if "api_key" not in st.session_state:
     st.session_state.api_key = None
 
-# -------------------- UI --------------------
+st.title("🌱 Student Wellness Companion")
 
 with st.sidebar:
-    st.title("🌱 Settings")
-    if st.button("🔄 Clear Chat"):
+    st.header("Settings")
+    if st.button("🔄 Clear Chat", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
-    if st.button("🔑 Reset API Key"):
+    if st.button("🔑 Reset API Key", use_container_width=True):
         st.session_state.api_key = None
         st.rerun()
-
-st.title("Student Wellness Companion")
 
 # -------------------- API KEY ENTRY --------------------
 
 if not st.session_state.api_key:
-    st.info("Welcome! Please enter your Gemini API Key from Google AI Studio to begin.")
-    key = st.text_input("API Key", type="password", placeholder="Paste your key here...")
+    st.info("Enter your Gemini API Key from Google AI Studio to begin.")
+    key = st.text_input("API Key", type="password")
     if st.button("Connect"):
         if key:
             st.session_state.api_key = key
             st.rerun()
-        else:
-            st.error("API Key is required.")
     st.stop()
 
 # -------------------- CHAT LOGIC --------------------
 
-# Initial Assistant Greeting
 if not st.session_state.messages:
     st.session_state.messages.append({
         "role": "assistant", 
-        "content": "Hey there! 👋 I'm your Wellness Companion. How's your day going? 💚"
+        "content": "Hey! 👋 I'm your Wellness Companion. How are you feeling today? 💚"
     })
 
-# Display Chat History
 for msg in st.session_state.messages:
-    avatar = "😊" if msg["role"] == "user" else "🌱"
-    with st.chat_message(msg["role"], avatar=avatar):
+    with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# User Chat Input
 if prompt := st.chat_input("Tell me what's on your mind..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user", avatar="😊"):
+    with st.chat_message("user"):
         st.markdown(prompt)
 
-    with st.chat_message("assistant", avatar="🌱"):
-        with st.spinner("Thinking with care..."):
+    with st.chat_message("assistant"):
+        with st.spinner("Listening with care..."):
             try:
-                # Pass previous history (excluding the greeting if necessary is handled in call_gemini)
+                # Send history (excluding the current prompt)
                 reply = call_gemini(st.session_state.api_key, st.session_state.messages[:-1], prompt)
                 st.markdown(reply)
                 st.session_state.messages.append({"role": "assistant", "content": reply})
