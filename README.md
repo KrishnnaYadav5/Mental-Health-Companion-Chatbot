@@ -1,6 +1,6 @@
 # 🌱 Student Wellness Companion Chatbot
 
-A compassionate AI-powered mental health support chatbot designed specifically for students, built with Streamlit and Google Gemini 2.5 Flash API.
+A compassionate AI-powered mental health support chatbot designed specifically for students, built with Streamlit and Google Gemini 2.5 Flash API. 
 
 
 ---
