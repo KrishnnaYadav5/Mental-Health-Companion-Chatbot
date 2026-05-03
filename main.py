@@ -59,21 +59,8 @@ Response Style:
 # -------------------- HELPERS --------------------
 
 def call_gemini(api_key: str, history, user_message: str) -> str:
-    """
-    Call the Gemini REST API directly using requests.
-    history: list of {"role": "user"|"assistant", "content": str}
-    user_message: latest user input
-    """
-    # Build contents for the API from chat history
+    # 1. Build conversation history (without the system prompt inside 'contents')
     contents = []
-
-    # Add system instruction as a "hidden" first message
-    contents.append({
-        "role": "user",
-        "parts": [{"text": SYSTEM_INSTRUCTION.strip()}],
-    })
-
-    # Add previous conversation
     for msg in history:
         role = "user" if msg["role"] == "user" else "model"
         contents.append({
@@ -81,17 +68,25 @@ def call_gemini(api_key: str, history, user_message: str) -> str:
             "parts": [{"text": msg["content"]}],
         })
 
-    # Add the latest user message
+    # 2. Add the latest user message
     contents.append({
         "role": "user",
         "parts": [{"text": user_message}],
     })
 
+    # 3. New Payload Structure for 2026
     payload = {
-        "contents": contents
-        # You can add "generationConfig" here if you want to tune temperature, etc.
+        "contents": contents,
+        "system_instruction": {
+            "parts": [{"text": SYSTEM_INSTRUCTION.strip()}]
+        },
+        "generationConfig": {
+            "temperature": 0.7,  # Good for empathy
+            "topP": 0.95,
+        }
     }
-
+    
+    # ... rest of your requests.post logic ...
     try:
         resp = requests.post(
             f"{API_URL}?key={api_key}",
