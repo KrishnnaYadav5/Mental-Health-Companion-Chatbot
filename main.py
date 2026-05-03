@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 
-# -------------------- CONFIG --------------------
+# -------------------- CONFIG -------------------- 
 
 st.set_page_config(
     page_title="Student Wellness Companion",
