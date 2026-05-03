@@ -9,7 +9,7 @@ st.set_page_config(
     layout="centered",
 )
 
-API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-3-flash:generateContent"
 
 SYSTEM_INSTRUCTION = """
 You are a compassionate and supportive AI companion designed specifically for students.
