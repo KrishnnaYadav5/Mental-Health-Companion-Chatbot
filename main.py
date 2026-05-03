@@ -9,24 +9,24 @@ st.set_page_config(
     layout="centered",
 )
 
-# FIXED: Changed model name to gemini-1.5-flash (standard production name)
+# Use gemini-1.5-flash for the standard production endpoint
 API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent"
 
 SYSTEM_INSTRUCTION = """
 You are a compassionate and supportive AI companion designed specifically for students.
 Your primary role is to provide emotional support, detect mood, and respond with empathy.
-(Keep responses concise, use gentle emojis, and follow safety protocols.)
+Keep responses concise, use gentle emojis, and follow safety protocols for distress.
 """
 
 # -------------------- HELPERS --------------------
 
 def call_gemini(api_key: str, history, user_message: str) -> str:
+    """Sends chat history to Gemini API via REST and returns the response."""
     contents = []
     
-    # FIXED: The Gemini API requires the FIRST message to be from the 'user'.
-    # We filter the history to ensure we don't start with an 'assistant' message.
+    # Logic Fix: Gemini API requires the conversation to start with a 'user' message.
+    # We skip any initial 'assistant' greeting messages in the history payload.
     for msg in history:
-        # Skip the very first message if it's from the assistant
         if not contents and msg["role"] == "assistant":
             continue
             
@@ -64,21 +64,82 @@ def call_gemini(api_key: str, history, user_message: str) -> str:
         resp.raise_for_status()
         data = resp.json()
         
-        # Extract text response
-        candidates = data.get("candidates", [])
-        if not candidates:
-            return "I'm listening, but I couldn't process that. Can you try rephrasing?"
-            
-        return candidates[0]["content"]["parts"][0]["text"]
+        # Extract response text
+        return data["candidates"][0]["content"]["parts"][0]["text"]
         
     except requests.exceptions.HTTPError as e:
-        # Check for 401 (Invalid Key) or 404 (Model Name error)
         try:
-            err_details = resp.json().get("error", {}).get("message", str(e))
+            # Try to grab the specific error message from Google (e.g., "Invalid API Key")
+            msg = resp.json().get("error", {}).get("message", str(e))
         except:
-            err_details = str(e)
-        raise RuntimeError(f"API Error: {err_details}")
+            msg = str(e)
+        raise RuntimeError(f"API Error: {msg}")
     except Exception as e:
         raise RuntimeError(f"Connection Error: {e}")
 
-# ... (Rest of your UI and Session State code remains the same) ...
+# -------------------- SESSION STATE --------------------
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+if "api_key" not in st.session_state:
+    st.session_state.api_key = None
+
+# -------------------- SIDEBAR & UI --------------------
+
+with st.sidebar:
+    st.title("Settings & Tips")
+    if st.button("🔄 Clear Chat"):
+        st.session_state.messages = []
+        st.rerun()
+
+    if st.button("🔑 Reset API Key"):
+        st.session_state.api_key = None
+        st.rerun()
+    
+    st.divider()
+    st.markdown("### 🧘 Quick Tips")
+    st.info("4-7-8 Breathing: Inhale 4s, Hold 7s, Exhale 8s.")
+
+st.title("🌱 Student Wellness Companion")
+
+# -------------------- API KEY ENTRY --------------------
+
+if not st.session_state.api_key:
+    key_input = st.text_input("Enter Gemini API Key", type="password")
+    if st.button("Connect"):
+        if key_input:
+            st.session_state.api_key = key_input
+            st.rerun()
+        else:
+            st.error("Please enter a key.")
+    st.stop()
+
+# -------------------- CHAT LOGIC --------------------
+
+# Greeting
+if not st.session_state.messages:
+    st.session_state.messages.append({
+        "role": "assistant", 
+        "content": "Hey! I'm your Wellness Companion. How are you feeling today? 💚"
+    })
+
+# Display History
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+# User Input
+if prompt := st.chat_input("Tell me what's on your mind..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            try:
+                response = call_gemini(st.session_state.api_key, st.session_state.messages[:-1], prompt)
+                st.markdown(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+            except Exception as e:
+                st.error(f"Something went wrong: {e}")
